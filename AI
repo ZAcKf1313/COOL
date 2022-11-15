@@ -1,201 +1,87 @@
-local Funcs = {}
-for i,v in pairs(script:GetChildren()) do 
-	local Data = require(v)
-	if typeof(Data) == "table" then 
-		for i,v in pairs(Data) do 
-			Funcs[i] = v
-		end
-	else
-		Funcs[v.Name]= Data
+-- Senko
+
+-- Variables
+
+local Folder = script.Parent
+local MainEvent = Folder:WaitForChild('Main')
+local SubEvent = Folder:WaitForChild("Sub")
+
+local InputService = game:GetService("UserInputService")
+
+local isBlocking = false
+local Equipped = true
+
+local Player = game:GetService("Players").LocalPlayer
+local Mouse = Player:GetMouse()
+
+-- Functions
+
+MainEvent:FireServer('Equip')
+
+MainEvent.OnClientEvent:Connect(function(action, bool)
+	if action == 'ChangeBlock' then
+		isBlocking = bool
 	end
-end
+end)
 
 
---strategy that you jump (when you can run away in a straight line) while opponent's lunge is down
-
---strategy that you walk around the opponent while running away
-
---don't go after the left side if the opponent is hugging the wall
---don't spam hit while not in range (gives opportunity for enemy to attack while lunge is down)
---make it go closer when the opponent's attack is on cooldown
---realize that once it's being attacked, if the opponent is plays optimally it can't dodge so try maneuvers while attacking
---make it not attempt to back off when it's already being hit
---back off when lunging Almost over and down
-
---detecting when enemy is about to lunge doesn't work
-
-
-
-local GetXDist = function(Pos1, Pos2)
-	return math.sqrt((Pos1.X - Pos2.X)^2+(Pos1.Z - Pos2.Z)^2)
-end
-
-local FairLookAt = function(Pos1, Pos2)
-	return CFrame.lookAt(Pos1, (Pos2 - Vector3.new(0,Pos2.Y - Pos1.Y,0))) * CFrame.Angles(0,math.rad(17.5),0)
-end
-
-
-Grips = {
-	Up = CFrame.new(0, 0, -1.70000005, 0, 0, 1, 1, 0, 0, 0, 1, 0),
-	Out = CFrame.new(0, 0, -1.70000005, 0, 1, 0, 1, -0, 0, 0, 0, -1)
-}
-
-local LungingGui = game.Players.LocalPlayer.PlayerGui:WaitForChild("Game").Lunging
-
-
-return function(Model)
-	local Humanoid = Model.Humanoid
-	local PrimaryPart = Model.PrimaryPart
-	local Tool = Model:FindFirstChildOfClass("Tool")
-	if not Tool then 
-		repeat Tool = Model:FindFirstChildOfClass("Tool"); wait() until Tool
+InputService.InputBegan:Connect(function(input, gpe)
+	if gpe then return end
+	
+	if input.KeyCode == Enum.KeyCode.Z then
+		if isBlocking then return end
+		
+		-- Avenger
+		
+		MainEvent:FireServer('SpecialMove', {Name = 'Avenger'})
+		
 	end
-	local Tick = 0
-	local LastAttack = 0
-	local LastOpponentAttack = 0
-	local EnemyExtended = false
-	while Model.PrimaryPart and Humanoid.Health > 0 and Model.Parent == workspace.ActivePlayers do  
-		Tick += game:GetService("RunService").RenderStepped:Wait()
-		local ClosestEnemy = Funcs.GetClosestEnemy(Model)
+	
+	if input.KeyCode == Enum.KeyCode.F then
+		if not isBlocking then
+			-- Not Blocking
+			
+			MainEvent:FireServer('Block', {Bool = true})
 		
-		if ClosestEnemy then 
-			local ClosestPart = Funcs.GetClosestPart(Tool.Handle.Position, ClosestEnemy)
-			local EnemyTool = ClosestEnemy:FindFirstChildOfClass("Tool")
-			
-			local LungeCooldown = false
-			if EnemyTool then 
-				if EnemyTool.Grip == Grips.Out then
-					if EnemyExtended == false then 
-						LastOpponentAttack = Tick
-					end
-					EnemyExtended = true
-				end
-			end
-			if Tool.Grip ~= Grips.Out then
-				LungeCooldown = true
-			end
-			
-			local HigherHp = Model.Humanoid.Health > ClosestEnemy.Humanoid.Health
-			local LowerHp = Model.Humanoid.Health < ClosestEnemy.Humanoid.Health
-			local XDist = GetXDist(Model.PrimaryPart.Position, ClosestEnemy.PrimaryPart.Position)
-			
-			local Distance = Funcs.GetDistance(Model, ClosestEnemy)
-			local HeightDifference = math.abs(ClosestEnemy.PrimaryPart.Position.Y - Model.PrimaryPart.Position.Y)
-			
-			local SameHeight = HeightDifference < 3
-			
-			local ClosestPos = ClosestEnemy.PrimaryPart.Position
-			--LungingGui.BackgroundColor3 = EnemyExtended and Color3.new(0.0470588, 1, 0) or Color3.new(1, 1, 1)
-		
-			if EnemyExtended and LungeCooldown and SameHeight and Distance > 6 and EnemyTool then 
-				--Tool.Grip = Grips.Up
-				
-				Model:SetPrimaryPartCFrame(FairLookAt(PrimaryPart.Position, EnemyTool.Handle.Position+ ClosestEnemy.PrimaryPart.CFrame.LookVector*EnemyTool.Handle.Size.Y*2.2))
-			else 
-				if Tool.Parent ~= Model then
-					Tool.Equip:FireServer()
-				end
-				Tool.Parent = Model
-				
-				
-				Model:SetPrimaryPartCFrame(CFrame.lookAt(PrimaryPart.Position, (ClosestPart.Position - Vector3.new(0,ClosestPart.Position.Y - PrimaryPart.Position.Y,0))) * CFrame.Angles(0,math.rad(17.5),0))
-				local Angle = 0
-				local LastAngle = Angle
-				--points sword towards closest position on part
-				for i = 1, 10 do
-					Angle = Angle + Funcs.FindBestAngle(Model, ClosestEnemy, EnemyTool)
-					if LastAngle == Angle then 
-						-- the wiggle to trigger touched
-							if HigherHp then
-								Angle += math.random(-10,10)
-							else 
-								Angle += math.random(-2,2)
-							end
-							Model:SetPrimaryPartCFrame(CFrame.lookAt(PrimaryPart.Position, (ClosestPart.Position - Vector3.new(0,ClosestPart.Position.Y - PrimaryPart.Position.Y,0))) * CFrame.Angles(0,math.rad(17.5 + Angle),0))
-						break
-					end
-					LastAngle = Angle
-					Model:SetPrimaryPartCFrame(CFrame.lookAt(PrimaryPart.Position, (ClosestPart.Position - Vector3.new(0,ClosestPart.Position.Y - PrimaryPart.Position.Y,0))) * CFrame.Angles(0,math.rad(17.5 + Angle),0))
-				end
-			end 
-			
-			local EnemyToModelVector = (Model.PrimaryPart.Position - ClosestEnemy.PrimaryPart.Position).Unit
-			local MoveDirection = ClosestEnemy.Humanoid.MoveDirection
-			local EnemyIsMovingTowardsModel = (EnemyToModelVector - MoveDirection).Magnitude < 1
-			--goes really aggresive when enemy is on cooldown
-			local IdealDistance = EnemyExtended and 8 or 7
-			--backs off
-			IdealDistance += EnemyIsMovingTowardsModel and 2 or 0
-			
-			
-			--detects when last lunged
-			--and (Tick - LastAttack > 0.2) -- putting this here for science
-			if Tool.Enabled and Tool.Grip == Grips.Up then
-				
-				LastAttack = Tick
-			end
-			
-			--pushes when enemy is about to run out of lunge (hopefully)
-			if EnemyTool and not EnemyTool.Enabled and (Tick - LastOpponentAttack > 0.1) and not (Tick - LastOpponentAttack < 0.2) and  (Tick - LastAttack > 0.05) then 
-				IdealDistance -= 2
-			end
-			
-			LungingGui.BackgroundColor3 = Color3.new(1, 1, 1)
-			--backs off when about to stop lunging
-			if (Tick - LastAttack > 0.5) then
-				LungingGui.BackgroundColor3 = Color3.new(0.0470588, 1, 0) 
-				
-				IdealDistance += 2
-			end
-
-			
-			if XDist < 15 then
-				Tool.Use:FireServer()
-			end
-			
-			if Distance > 8 then
-				if LowerHp then 
-					IdealDistance += 10
-				end
-			end
-			
-			
-			--local SpacedPosition = ClosestEnemy.PrimaryPart.Position - (ClosestEnemy.PrimaryPart.Position - PrimaryPart.Position).Unit*IdealDistance
-			
-			local Offset = -ClosestEnemy.PrimaryPart.CFrame.RightVector
-			local SideCast = Funcs.SideCast(ClosestEnemy)
-			
-
-			if HigherHp and SameHeight then 
-				Offset*= 3
-				IdealDistance = 2
-			end
-			
-			if SideCast or Tool.Grip == Grips.Up then 
-				Offset = Vector3.new(0,0,0)
-			end
-			
-			--using closestpos could be counterintuitive because it uses the root part's magnitude (so it's simpler to calculate range) but it gets applied to the closest part which might not work in all situations
-			--favoring the side without the sword
-			local SpacedPosition = (ClosestPos - (ClosestPos - PrimaryPart.Position).Unit*IdealDistance) + Offset
-			if HigherHp then 
-				Offset*= 3
-				--SpacedPosition = ClosestEnemy["Left Arm"].Position  + Offset
-			end
-		
-			
-			if Distance < IdealDistance then 
-				local RetreatPos = Funcs.GetRetreatDirection(Model, ClosestEnemy,10)
-				if RetreatPos and EnemyIsMovingTowardsModel then 
-					RetreatPos = Funcs.GetRetreatDirection(Model, ClosestEnemy,100)
-					Humanoid:MoveTo(RetreatPos)
-				else
-					Humanoid:MoveTo(SpacedPosition)
-				end
-			else 
-				Humanoid:MoveTo(SpacedPosition)
-			end
-			
 		end
 	end
-end
+	
+	if input.KeyCode == Enum.KeyCode.Q then
+		if isBlocking then return end
+		if SubEvent:InvokeServer('Check', 'Equip') then return end
+		
+		-- Equip and unequip.
+		
+		if Equipped == true then
+			Equipped = false
+			
+			-- Unequip
+			
+			MainEvent:FireServer('WeldEquip', {Bool = false})
+			
+		elseif Equipped == false then
+			Equipped = true
+			
+			-- Equip
+			
+			MainEvent:FireServer('WeldEquip', {Bool = true})
+		end
+		
+	end
+end)
+
+InputService.InputEnded:Connect(function(input, gpe)	
+	if input.KeyCode == Enum.KeyCode.F then
+		
+		if isBlocking then
+			-- Blocking
+			
+			MainEvent:FireServer('Block', {Bool = false})
+		end
+		
+	end
+end)
+
+Mouse.Button1Down:Connect(function()
+	MainEvent:FireServer("Attack", {})
+end)
