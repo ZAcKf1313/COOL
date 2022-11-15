@@ -1,5 +1,46 @@
+local char = game:GetService("Players").LocalPlayer.Character
+function isthere(folder)
+   local a ={}
+for i,v in pairs(workspace:GetChildren()) do
+   if v:IsA("Folder") and v.Name == folder then
+       table.insert(a, v)
+       end
+end
+if#a==0 then
+   return false
+   else
+       return true
+       end
+end
 
--- Decompiled with the Synapse X Luau decompiler.
+local Filter1
+if isthere("Filter") == false then
+  local Filter = Instance.new("Folder", workspace)
+  Filter.Name = "Filter"
+  Filter1 = Filter
+else
+  Filter1 = workspace:WaitForChild("Filter")
+end
+
+local Map1
+if isthere("Map") == false then
+  local Map = Instance.new("Folder", workspace)
+  Map.Name = "Map"
+  Map1 = Map
+else
+  Map1 = workspace:WaitForChild("Map")
+end
+
+local ActivePlayers1
+if isthere("ActivePlayers") == false then
+  local ActivePlayers = Instance.new("Folder", workspace)
+  ActivePlayers.Name = "ActivePlayers"
+  ActivePlayers1 = ActivePlayers
+else
+  ActivePlayers1 = workspace:WaitForChild("ActivePlayers")
+end
+
+
 
 local v1 = {};
 grips = {
