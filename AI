@@ -9,7 +9,7 @@ for i,v in pairs(script:GetChildren()) do
 		Funcs[v.Name]= Data
 	end
 end
-local h = chr:FindFirstChildOfClass("Humanoid") 
+
 
 --strategy that you jump (when you can run away in a straight line) while opponent's lunge is down
 
