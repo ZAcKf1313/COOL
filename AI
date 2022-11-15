@@ -2,9 +2,6 @@
 
 -- Variables
 
-local Folder = script.Parent
-local MainEvent = Folder:WaitForChild('Main')
-local SubEvent = Folder:WaitForChild("Sub")
 
 local InputService = game:GetService("UserInputService")
 
