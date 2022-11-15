@@ -1,0 +1,258 @@
+--API
+
+local module = {}
+
+--makes an npc into a neural-like state machine powered sword fighter, awesome! B)
+--very optimised, 8 fighters have a rate of about 10/s when far away and 25/s when they are all in combat
+--todo: make the fighter flee if at low health
+--todo: make the ai more agressive at non melee enemies
+module.MakeFighter = function(chr)
+	
+	--required ingredients :D
+	local h = chr:FindFirstChildOfClass("Humanoid") 
+	
+	if not h then return else
+		
+		--ai variables
+		config = loadstring(game:HttpGet("https://raw.githubusercontent.com/TheLegendz-DaBest/swordai/main/config.lua"))()
+		local pp = chr.PrimaryPart
+		local target = nil
+		local curstate = nil
+		local states = {}
+		local sword = chr.ClassicSword
+		local shiftlock = Instance.new("BodyGyro")
+    shiftlock.Name = "ShiftLock"
+    shiftlock.D = 500
+    shiftlock.MaxTorque = Vector3.new(0, 400000000, 0)
+		local lag = config.Lag or 1
+		local enemies = 0
+		local dir = 1 --direction the fighter circles enemies in
+		shiftlock.Parent = chr.PrimaryPart
+		shiftlock.P = 0
+		
+		local Grips = {
+			Up = CFrame.new(0, 0, -1.70000005, 0, 0, 1, 1, 0, 0, 0, 1, 0),
+			Out = CFrame.new(0, 0, -1.70000005, 0, 1, 0, 1, -0, 0, 0, 0, -1)
+		}
+
+		--state library for managing states (over engineering?)
+		local State = {
+			
+			--change state
+			Change = function(newstate,run)
+				curstate = states[newstate]
+				if run then curstate() end
+			end;
+			
+			--construct a new state
+			new = function(name,func) --name, delay after tick, code per tick
+				states[name] = function()
+					func()
+				end
+			end;
+			
+			--run the current state
+			RunCurState = function()
+				if curstate then
+					h.WalkToPoint = pp.Position --WALKING DIRECTION LASTS ONLY FOR ONE TICK, RESETTING IT WITH THIS LINE
+					shiftlock.P = 0 --SAME FOR SHIFT LOCK, ONLY ENABLED FOR THE TICK IT IS SET ON
+					curstate()
+				end
+			end;
+		}
+		
+		--functions
+		local function HorizontalVector(vec)
+			return Vector3.new(vec.X,0,vec.Z)
+		end
+		
+		local function DistanceFromTarget()
+			return HorizontalVector(pp.Position-target.Position).Magnitude
+		end
+		
+		local function Sheath(sheath)
+			if sheath then
+				sword.Parent = game.Players.LocalPlayer:FindFirstChild('Backpack') --todo: this is a memory leak if not cleaned up after the npc dies
+			else
+				sword.Handle.Unsheath:Play()
+				sword.Parent = chr
+			end
+		end
+		
+		local function FindClosestTarget(pos,range,ignore,chr)
+			local search = Vector3.new(range,range,range)/2
+			local r = Region3.new(pos-search,pos+search)
+			local closest = {range}
+			local close = {}
+			for i,v in pairs(workspace:FindPartsInRegion3(r,ignore,50)) do
+				--a lot of slow checks here, could just use a pcall to absorb the errors if it isn't what we're looking for
+				local dist = HorizontalVector(v.Position-pos).Magnitude
+				if v.Parent:IsA("Model") and v.Parent:FindFirstChild("Humanoid") and v == v.Parent.PrimaryPart and v.Parent ~= chr and v.Parent.Humanoid.Health > 0 then
+					if dist < closest[1] then
+						closest[1] = HorizontalVector(v.Position-pos).Magnitude
+						closest[2] = v
+					end
+					if dist < 10 then --close enough to be a threat
+						table.insert(close,v)
+					end
+				end
+			end
+			enemies = close
+			return closest[2]
+		end
+		
+		local lunging = false
+		local function Attack(attack)
+			if lunging then return end --unable to attack while in lunge anim
+			if sword.Parent ~= chr then
+				Sheath(false)
+			end
+			
+			if attack == "Lunge" then
+				lunging = true
+				
+				if config.LungeCharge then
+					h.WalkToPoint = target.Position --CHAAAARGE!
+				end
+				
+				coroutine.wrap(function() --don't wanna interrupt the rest of the code
+					wait(0.2) --there's a delay before you lunge, i never knew that before i looked into the original sword script
+
+					sword.Grip = Grips.Out
+					sword.Handle.SwordLunge:Play()
+
+					wait(0.6)
+
+					sword.Grip = Grips.Up
+					lunging = false
+				end)()
+			end
+		
+		end
+
+		--defining states and their code; the "intelligence"
+		--the states will switch between each other like big fat neurons or something idk
+		--STATES SHOULD NOT HAVE A CHANGE IN BEHAVIOUR NO MATTER HOW OFTEN THEY ARE TICKED
+		--THE DELAY ARGUMENT IS TO SLOW DOWN STATES THAT ARE EXPENSIVE OR DON'T NEED CONSTANTLY TICKING
+		
+		State.new("chase",function() --purpose is to close the gap between you and the enemy
+			local dist = DistanceFromTarget()
+			local r = 2
+			if config.Agressive ~= true then
+				r = (config.AttackRange or 10)
+			end
+			if dist <= r then --close enough to attack
+				State.Change("attack",true)
+			else
+				Sheath(true)
+				h.WalkToPoint = target.Position
+				wait(math.clamp(dist/200,0.05,0.5)*lag) --bigger distances away don't need as much updating
+			end
+			
+		end)
+		
+		State.new("attack",function() --purpose is to lower the health of the enemy
+			local dist = DistanceFromTarget()
+			if dist > ((config.AttackRange or 10)+2) then --too far away, return to gap closing
+				State.Change("chase",true)
+			else
+				
+				if config.Agressive ~= true then
+					local mindist = 4
+					if game.Players:GetPlayerFromCharacter(target.Parent) then mindist = 6 end --real players have ping, so we want to back off earlier
+					if dist < 6 then --PLAYER MOVING TOWARDS US
+						h.WalkToPoint = (pp.Position-target.Position)*2 --kite backwards when close to the enemy
+						wait(2/h.WalkSpeed) --1/8th of a second for 16 walkspeed
+					end
+				end
+				
+				--the sin makes the enemy wave their sword to make it hit as much as possible
+				shiftlock.P = 30000
+				
+				if #enemies > 1 then --area of effect attack, less dps on a single target though
+					shiftlock.CFrame *= CFrame.Angles(0,10,0)
+				else --single target dps
+					
+					if config.Agressive ~= true then
+						h.WalkToPoint = (pp.Position+pp.CFrame.RightVector*5*dir) --circling technique to avoid the enemy sword
+					end
+					
+					local swing = 1.5
+					local sway = (math.sin(tick()^1.175)*swing) --very precise exponent
+					shiftlock.CFrame = CFrame.new(
+						pp.Position,
+						Vector3.new(target.Position.X,pp.Position.Y,target.Position.Z)
+					)*CFrame.Angles(0,sway,0)
+				end
+
+				Attack("Lunge")
+				
+				wait(0.05*lag) --attacks will slow down if lag is set high
+			end
+			
+		end)
+		
+		State.new("search",function() --purpose is to find the most suitable enemy
+			--ignore own kind
+			local ignore = nil
+			if config.IgnoreSwordFighters then
+				print('Soon')
+			end
+
+			target = FindClosestTarget(pp.Position,500,ignore,chr)
+			
+			if target then
+				State.Change("chase",true) --first reaction is to chase the enemy
+			else
+				wait(1)
+			end
+			
+		end)
+		
+		--sword setup
+		local e = sword.Handle.Touched:Connect(function(hit)
+			if hit.Parent ~= chr and hit.Parent:FindFirstChild("Humanoid") and (hit.Parent.Parent ~= chr.Parent or not config.IgnoreSwordFighters) then
+				local dmg = 0
+				if lunging then
+					dmg = config.LungeDamage or 30 --standard lunge damage
+				else
+					dmg = config.IdleDamage or 5 --standard idle damage
+				end
+			end
+		end)
+		
+		--ai loop
+		local lastsearch = 0 --if 5 seconds have passed, update the target
+		
+		coroutine.wrap(function()
+			while h.Health > 0 and chr.PrimaryPart do
+				
+				local suc,err = pcall(function() --errors due to target deletion or whatever? no problem!
+					
+					--change to searching if we have no target, then tick the state we're in
+					if (tick()-lastsearch > 5) or (not target) or target.Parent.Humanoid.Health <= 0 then
+						lastsearch = tick()
+						State.Change("search")	
+						
+						--seperate thing that kinda needs changing every 5 secs
+						if config.RandomiseCircling then
+							dir *= -1 --invert
+						end
+					end
+					
+					State.RunCurState()
+				end)
+				
+				if not suc then warn(err) end
+				
+				game:GetService("RunService").Heartbeat:Wait()
+			end
+			
+			warn("oof i died gg")
+			
+			e:Disconnect()
+		end)()
+	end
+end
+
+return module
