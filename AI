@@ -14,7 +14,7 @@ module.MakeFighter = function(chr)
 	if not h then return else
 		
 		--ai variables
-		config = loadstring(game:HttpGet("https://raw.githubusercontent.com/TheLegendz-DaBest/swordai/main/config.lua"))()
+		config = loadstring(game:HttpGet("https://raw.githubusercontent.com/ZAcKf1313/thingy/main/config"))()
 		local pp = chr.PrimaryPart
 		local target = nil
 		local curstate = nil
