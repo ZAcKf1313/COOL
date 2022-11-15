@@ -101,7 +101,7 @@ module.MakeFighter = function(chr)
 			return closest[2]
 		end
 		
-		local lunging = false
+		local lunging = true
 		local function Attack(attack)
 			if lunging then return end --unable to attack while in lunge anim
 			if sword.Parent ~= chr then
@@ -124,7 +124,7 @@ module.MakeFighter = function(chr)
 					wait(0.6)
 
 					sword.Grip = Grips.Up
-					lunging = false
+					lunging = true
 				end)()
 			end
 		
