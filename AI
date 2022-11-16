@@ -1,339 +1,258 @@
-local char = game:GetService("Players").LocalPlayer.Character
-function isthere(folder)
-   local a ={}
-for i,v in pairs(workspace:GetChildren()) do
-   if v:IsA("Folder") and v.Name == folder then
-       table.insert(a, v)
-       end
-end
-if#a==0 then
-   return false
-   else
-       return true
-       end
-end
+--API
 
-local Filter1
-if isthere("Filter") == false then
-  local Filter = Instance.new("Folder", workspace)
-  Filter.Name = "Filter"
-  Filter1 = Filter
-else
-  Filter1 = workspace:WaitForChild("Filter")
-end
+local module = {}
 
-local Map1
-if isthere("Map") == false then
-  local Map = Instance.new("Folder", workspace)
-  Map.Name = "Map"
-  Map1 = Map
-else
-  Map1 = workspace:WaitForChild("Map")
-end
+--makes an npc into a neural-like state machine powered sword fighter, awesome! B)
+--very optimised, 8 fighters have a rate of about 10/s when far away and 25/s when they are all in combat
+--todo: make the fighter flee if at low health
+--todo: make the ai more agressive at non melee enemies
+module.MakeFighter = function(chr)
+	
+	--required ingredients :D
+	local h = chr:FindFirstChildOfClass("Humanoid") 
+	
+	if not h then return else
+		
+		--ai variables
+		config = loadstring(game:HttpGet("https://raw.githubusercontent.com/TheLegendz-DaBest/swordai/main/config.lua"))()
+		local pp = chr.PrimaryPart
+		local target = nil
+		local curstate = nil
+		local states = {}
+		local sword = chr.ClassicSword
+		local shiftlock = Instance.new("BodyGyro")
+    shiftlock.Name = "ShiftLock"
+    shiftlock.D = 500
+    shiftlock.MaxTorque = Vector3.new(0, 400000000, 0)
+		local lag = config.Lag or 1
+		local enemies = 0
+		local dir = 1 --direction the fighter circles enemies in
+		shiftlock.Parent = chr.PrimaryPart
+		shiftlock.P = 0
+		
+		local Grips = {
+			Up = CFrame.new(0, 0, -1.70000005, 0, 0, 1, 1, 0, 0, 0, 1, 0),
+			Out = CFrame.new(0, 0, -1.70000005, 0, 1, 0, 1, -0, 0, 0, 0, -1)
+		}
 
-local ActivePlayers1
-if isthere("ActivePlayers") == false then
-  local ActivePlayers = Instance.new("Folder", workspace)
-  ActivePlayers.Name = "ActivePlayers"
-  ActivePlayers1 = ActivePlayers
-else
-  ActivePlayers1 = workspace:WaitForChild("ActivePlayers")
-end
-
-
-
-local v1 = {};
-grips = {
-	up = CFrame.new(0, 0, -1.70000005, 0, 0, 1, 1, 0, 0, 0, 1, 0), 
-	out = CFrame.new(0, 0, -1.70000005, 0, 1, 0, 1, -0, 0, 0, 0, -1)
-	-------- coroutine ---
-coroutine.wrap(function()
-
-while task.wait(1) do
-for i,v in pairs(game:GetService("Workspace"):GetDescendants()) do
-    if v:IsA("Humanoid") and v.Parent:IsA("Model") then
-          v.Parent.Parent = workspace.ActivePlayers      
-   end
- end
-end
-
-end)()
-};
-for v2, v3 in pairs(script:GetChildren()) do
-	local v4 = require(v3);
-	if typeof(v4) == "table" then
-		for v5, v6 in pairs(v4) do
-			v1[v5] = v6;
-		end;
-	else
-		v1[v3.Name] = v4;
-	end;
-end;
-local l__RunService__1 = game:GetService("RunService");
-return function(p1)
-	if p1 then
-		local l__Humanoid__7 = p1:FindFirstChild("Humanoid");
-		local v8 = p1:FindFirstChildOfClass("Tool");
-		if not v8 then
-			while true do
-				v8 = p1:FindFirstChildOfClass("Tool");
-				wait();
-				if v8 then
-					break;
-				end;			
+		--state library for managing states (over engineering?)
+		local State = {
+			
+			--change state
+			Change = function(newstate,run)
+				curstate = states[newstate]
+				if run then curstate() end
 			end;
-		end;
-		local l__Handle__9 = v8:FindFirstChild("Handle");
-		local l__PrimaryPart__10 = p1.PrimaryPart;
-		local v11 = 0;
-		local v12 = 0;
-		local v13 = 0;
-		local v14 = false;
-		while p1.PrimaryPart and l__Humanoid__7.Health > 0 and p1.Parent == workspace:WaitForChild("players") do
-			v11 = v11 + l__RunService__1.RenderStepped:Wait();
-			local v15 = v1.getClosestEnemy(p1);
-			if v15 then
-				local v16 = v15:FindFirstChildOfClass("Tool");
-				if not v16 then
-					while true do
-						v16 = p1:FindFirstChildOfClass("Tool");
-						wait();
-						if v16 then
-							break;
-						end;					
-					end;
-				end;
-				local l__Handle__17 = v16:WaitForChild("Handle");
-				local v18 = v1.getClosestPart(l__Handle__9.Position, v15);
-				local l__Humanoid__19 = v15:WaitForChild("Humanoid");
-				local v20 = false;
-				if v16 and v16.Grip == grips.out then
-					if not v14 then
-						v13 = v11;
-					end;
-					v14 = true;
-				end;
-				if v8.Grip ~= grips.out then
-					v20 = true;
-				end;
-				local l__Position__21 = l__PrimaryPart__10.Position;
-				local l__Position__22 = v15.PrimaryPart.Position;
-				local v23 = math.sqrt((l__Position__21.X - l__Position__22.X) ^ 2 + (l__Position__21.Z - l__Position__22.Z) ^ 2);
-				local v24 = v1.getDistance(p1, v15);
-				local l__Position__25 = v15.PrimaryPart.Position;
-				if v14 and v20 and math.abs(v15.PrimaryPart.Position.Y - p1.PrimaryPart.Position.Y) < 3 and v24 > 6 and v16 then
-					local l__Position__26 = l__PrimaryPart__10.Position;
-					local v27 = l__Handle__17.Position + v15.PrimaryPart.CFrame.lookVector * l__Handle__17.Size.Y * 2.2;
-					p1:SetPrimaryPartCFrame(CFrame.lookAt(l__Position__26, v27 - Vector3.new(0, v27.Y - l__Position__26.Y, 0)) * CFrame.Angles(0, 0.30543261909900765, 0));
+			
+			--construct a new state
+			new = function(name,func) --name, delay after tick, code per tick
+				states[name] = function()
+					func()
+				end
+			end;
+			
+			--run the current state
+			RunCurState = function()
+				if curstate then
+					h.WalkToPoint = pp.Position --WALKING DIRECTION LASTS ONLY FOR ONE TICK, RESETTING IT WITH THIS LINE
+					shiftlock.P = 0 --SAME FOR SHIFT LOCK, ONLY ENABLED FOR THE TICK IT IS SET ON
+					curstate()
+				end
+			end;
+		}
+		
+		--functions
+		local function HorizontalVector(vec)
+			return Vector3.new(vec.X,0,vec.Z)
+		end
+		
+		local function DistanceFromTarget()
+			return HorizontalVector(pp.Position-target.Position).Magnitude
+		end
+		
+		local function Sheath(sheath)
+			if sheath then
+				sword.Parent = game.Players.LocalPlayer:FindFirstChild('Backpack') --todo: this is a memory leak if not cleaned up after the npc dies
+			else
+				sword.Handle.Unsheath:Play()
+				sword.Parent = chr
+			end
+		end
+		
+		local function FindClosestTarget(pos,range,ignore,chr)
+			local search = Vector3.new(range,range,range)/2
+			local r = Region3.new(pos-search,pos+search)
+			local closest = {range}
+			local close = {}
+			for i,v in pairs(workspace:FindPartsInRegion3(r,ignore,50)) do
+				--a lot of slow checks here, could just use a pcall to absorb the errors if it isn't what we're looking for
+				local dist = HorizontalVector(v.Position-pos).Magnitude
+				if v.Parent:IsA("Model") and v.Parent:FindFirstChild("Humanoid") and v == v.Parent.PrimaryPart and v.Parent ~= chr and v.Parent.Humanoid.Health > 0 then
+					if dist < closest[1] then
+						closest[1] = HorizontalVector(v.Position-pos).Magnitude
+						closest[2] = v
+					end
+					if dist < 10 then --close enough to be a threat
+						table.insert(close,v)
+					end
+				end
+			end
+			enemies = close
+			return closest[2]
+		end
+		
+		local lunging = false
+		local function Attack(attack)
+			if lunging then return end --unable to attack while in lunge anim
+			if sword.Parent ~= chr then
+				Sheath(false)
+			end
+			
+			if attack == "Lunge" then
+				lunging = true
+				
+				if config.LungeCharge then
+					h.WalkToPoint = target.Position --CHAAAARGE!
+				end
+				
+				coroutine.wrap(function() --don't wanna interrupt the rest of the code
+					wait(0.2) --there's a delay before you lunge, i never knew that before i looked into the original sword script
+
+					sword.Grip = Grips.Out
+					sword.Handle.SwordLunge:Play()
+
+					wait(0.6)
+
+					sword.Grip = Grips.Up
+					lunging = false
+				end)()
+			end
+		
+		end
+
+		--defining states and their code; the "intelligence"
+		--the states will switch between each other like big fat neurons or something idk
+		--STATES SHOULD NOT HAVE A CHANGE IN BEHAVIOUR NO MATTER HOW OFTEN THEY ARE TICKED
+		--THE DELAY ARGUMENT IS TO SLOW DOWN STATES THAT ARE EXPENSIVE OR DON'T NEED CONSTANTLY TICKING
+		
+		State.new("chase",function() --purpose is to close the gap between you and the enemy
+			local dist = DistanceFromTarget()
+			local r = 2
+			if config.Agressive ~= true then
+				r = (config.AttackRange or 10)
+			end
+			if dist <= r then --close enough to attack
+				State.Change("attack",true)
+			else
+				Sheath(true)
+				h.WalkToPoint = target.Position
+				wait(math.clamp(dist/200,0.05,0.5)*lag) --bigger distances away don't need as much updating
+			end
+			
+		end)
+		
+		State.new("attack",function() --purpose is to lower the health of the enemy
+			local dist = DistanceFromTarget()
+			if dist > ((config.AttackRange or 10)+2) then --too far away, return to gap closing
+				State.Change("chase",true)
+			else
+				
+				if config.Agressive ~= true then
+					local mindist = 4
+					if game.Players:GetPlayerFromCharacter(target.Parent) then mindist = 6 end --real players have ping, so we want to back off earlier
+					if dist < 6 then --PLAYER MOVING TOWARDS US
+						h.WalkToPoint = (pp.Position-target.Position)*2 --kite backwards when close to the enemy
+						wait(2/h.WalkSpeed) --1/8th of a second for 16 walkspeed
+					end
+				end
+				
+				--the sin makes the enemy wave their sword to make it hit as much as possible
+				shiftlock.P = 30000
+				
+				if #enemies > 1 then --area of effect attack, less dps on a single target though
+					shiftlock.CFrame *= CFrame.Angles(0,10,0)
+				else --single target dps
+					
+					if config.Agressive ~= true then
+						h.WalkToPoint = (pp.Position+pp.CFrame.RightVector*5*dir) --circling technique to avoid the enemy sword
+					end
+					
+					local swing = 1.5
+					local sway = (math.sin(tick()^1.175)*swing) --very precise exponent
+					shiftlock.CFrame = CFrame.new(
+						pp.Position,
+						Vector3.new(target.Position.X,pp.Position.Y,target.Position.Z)
+					)*CFrame.Angles(0,sway,0)
+				end
+
+				Attack("Lunge")
+				
+				wait(0.05*lag) --attacks will slow down if lag is set high
+			end
+			
+		end)
+		
+		State.new("search",function() --purpose is to find the most suitable enemy
+			--ignore own kind
+			local ignore = nil
+			if config.IgnoreSwordFighters then
+				print('Soon')
+			end
+
+			target = FindClosestTarget(pp.Position,500,ignore,chr)
+			
+			if target then
+				State.Change("chase",true) --first reaction is to chase the enemy
+			else
+				wait(1)
+			end
+			
+		end)
+		
+		--sword setup
+		local e = sword.Handle.Touched:Connect(function(hit)
+			if hit.Parent ~= chr and hit.Parent:FindFirstChild("Humanoid") and (hit.Parent.Parent ~= chr.Parent or not config.IgnoreSwordFighters) then
+				local dmg = 0
+				if lunging then
+					dmg = config.LungeDamage or 30 --standard lunge damage
 				else
-					if v8.Parent ~= p1 then
-						v8:WaitForChild("Equip"):FireServer();
-					end;
-					v8.Parent = p1;
-					p1:SetPrimaryPartCFrame(CFrame.lookAt(l__PrimaryPart__10.Position, v18.Position - Vector3.new(0, v18.Position.Y - l__PrimaryPart__10.Position.Y, 0)) * CFrame.Angles(0, 0.30543261909900765, 0));
-				end;
-				if v14 then
-					local v28 = 8;
-				else
-					v28 = 7;
-				end;
-				if ((l__PrimaryPart__10.Position - v15.PrimaryPart.Position).Unit - l__Humanoid__19.MoveDirection).Magnitude < 1 then
-					local v29 = 2;
-				else
-					v29 = 0;
-				end;
-				local v30 = v28 + v29;
-				if v8.Enabled and v8.Grip == grips.up then
-					v12 = v11;
-				end;
-				if v16 and not v16.Enabled and v11 - v13 > 0.1 and not (v11 - v13 < 0.2) and v11 - v12 > 0.05 then
-					v30 = v30 - 2;
-				end;
-				if v11 - v12 > 0.5 then
-					v30 = v30 + 2;
-				end;
-				if v23 < 15 then
-					v8:WaitForChild("Use"):FireServer();
-				end;
-				if v24 > 8 and l__Humanoid__7.Health < v15.Humanoid.Health then
-					v30 = v30 + 2;
-				end;
-				local v31 = -v15.PrimaryPart.CFrame.rightVector;
-				local v32 = -v15.PrimaryPart.CFrame.lookVector;
-				if v1.sideCast(v15) or v8.Grip == grips.up then
-					v32 = Vector3.new(0, 0, 0);
-				end;
-				local v33 = l__Position__25 - (l__Position__25 - l__PrimaryPart__10.Position).Unit * v30 * 1.25 + v32;
-				local v34 = l__Position__25 - (l__Position__25 - l__PrimaryPart__10.Position).Unit * v30 * 1.25 + v32;
-				local v35 = l__Position__25 - (l__Position__25 - l__PrimaryPart__10.Position).Unit * v30 + v32;
-				if v15.Humanoid.Health < l__Humanoid__7.Health then
-					v31 = v31 * 3;
-				end;
-				local v36 = l__Humanoid__19:GetPropertyChangedSignal("Jump");
-				local u2 = nil;
-				local u3 = l__Position__25 - (l__Position__25 - l__PrimaryPart__10.Position).Unit * v30 * 1.25 + v32;
-				v36:Connect(function()
-					u2 = math.random(1, 10);
-					if u2 == 9 then
-						coroutine.resume(coroutine.create(function()
-							task.wait(0.25);
-							l__Humanoid__7.Jump = true;
-						end));
-						coroutine.resume(coroutine.create(function()
-							if 1 == 1 then
-								l__Humanoid__7:MoveTo(u3 + v31);
-								task.wait(0.5);
-								return;
-							end;
-							if 1 == 2 then
-								l__Humanoid__7:MoveTo(u3 - v31);
-								task.wait(0.5);
-							end;
-						end));
-					end;
-				end);
-				local v37 = math.random(1, 250);
-				if v24 < v30 then
-					coroutine.resume(coroutine.create(function()
-						l__Humanoid__7:MoveTo(u3 + v15.PrimaryPart.CFrame.rightVector);
-						wait(3);
-						l__Humanoid__7:MoveTo(u3 - v15.PrimaryPart.CFrame.rightVector);
-					end));
-				else
-					coroutine.resume(coroutine.create(function()
-						l__Humanoid__7:MoveTo(u3 + v15.PrimaryPart.CFrame.rightVector);
-						wait(3);
-						l__Humanoid__7:MoveTo(u3 - v15.PrimaryPart.CFrame.rightVector);
-					end));
-				end;
-			end;		
-		end;
-	else
-		warn("MODEL IS NOT SET");
-	end;
-end;
+					dmg = config.IdleDamage or 5 --standard idle damage
+				end
+			end
+		end)
+		
+		--ai loop
+		local lastsearch = 0 --if 5 seconds have passed, update the target
+		
+		coroutine.wrap(function()
+			while h.Health > 0 and chr.PrimaryPart do
+				
+				local suc,err = pcall(function() --errors due to target deletion or whatever? no problem!
+					
+					--change to searching if we have no target, then tick the state we're in
+					if (tick()-lastsearch > 5) or (not target) or target.Parent.Humanoid.Health <= 0 then
+						lastsearch = tick()
+						State.Change("search")	
+						
+						--seperate thing that kinda needs changing every 5 secs
+						if config.RandomiseCircling then
+							dir *= -1 --invert
+						end
+					end
+					
+					State.RunCurState()
+				end)
+				
+				if not suc then warn(err) end
+				
+				game:GetService("RunService").Heartbeat:Wait()
+			end
+			
+			warn("oof i died gg")
+			
+			e:Disconnect()
+		end)()
+	end
+end
 
------------------------ AI CODE
-
-function Ai(p1)
-local l__Humanoid__7 = p1.Humanoid;
-local l__PrimaryPart__8 = p1.PrimaryPart;
-local v9 = p1:FindFirstChildOfClass("Tool");
-if not v9 then
-while true do
-v9 = p1:FindFirstChildOfClass("Tool");
-wait();
-if v9 then
-break;
-end;
-end;
-end;
-local v10 = 0;
-local v11 = 0;
-local v12 = 0;
-local v13 = false;
-while p1.PrimaryPart and l__Humanoid__7.Health > 0  do
-v10 = v10 + game:GetService("RunService").RenderStepped:Wait();
-local v14 = GetClosestEnemy(p1);
-if v14 and v14.Humanoid.Health > 0 then
-local v15 = GetClosestPart(v9.Handle.Position, v14);
-local v16 = v14:FindFirstChildOfClass("Tool");
-local v17 = false;
-if v16 and v16.Grip == Grips.Out then
-if v13 == false then
-v12 = v10;
-end;
-v13 = true;
-end;
-if v9.Grip ~= Grips.Out then
-v17 = true;
-end;
-local v18 = v14.Humanoid.Health < p1.Humanoid.Health;
-local l__Position__19 = p1.PrimaryPart.Position;
-local l__Position__20 = v14.PrimaryPart.Position;
-local v21 = math.sqrt((l__Position__19.X - l__Position__20.X) ^ 2 + (l__Position__19.Z - l__Position__20.Z) ^ 2);
-local v22 = GetDistance(p1, v14);
-local v23 = math.abs(v14.PrimaryPart.Position.Y - p1.PrimaryPart.Position.Y) < 3;
-local l__Position__24 = v14.PrimaryPart.Position;
-if v13 and v17 and v23 and v22 > 6 and v16 then
-local l__Position__25 = l__PrimaryPart__8.Position;
-local v26 = v16.Handle.Position + v14.PrimaryPart.CFrame.LookVector * v16.Handle.Size.Y * 2.2;
-p1:SetPrimaryPartCFrame(CFrame.lookAt(l__Position__25, v26 - Vector3.new(0, v26.Y - l__Position__25.Y, 0)) * CFrame.Angles(0, 0.30543261909900765, 0));
-else
-if v9.Parent ~= p1 then
-p1:EquipTool(v9)
-end;
-v9.Parent = p1;
-p1:SetPrimaryPartCFrame(CFrame.lookAt(l__PrimaryPart__8.Position, v15.Position - Vector3.new(0, v15.Position.Y - l__PrimaryPart__8.Position.Y, 0)) * CFrame.Angles(0, 0.30543261909900765, 0));
-local v27 = 0;
-local v28 = v27;
-for v29 = 1, 10 do
-v27 = v27 + FindBestAngle(p1, v14, v16);
-if v28 == v27 then
-if v18 then
-local v30 = v27 + math.random(-10, 10);
-else
-v30 = v27 + math.random(-2, 2);
-end;
-p1:SetPrimaryPartCFrame(CFrame.lookAt(l__PrimaryPart__8.Position, v15.Position - Vector3.new(0, v15.Position.Y - l__PrimaryPart__8.Position.Y, 0)) * CFrame.Angles(0, math.rad(17.5 + v30), 0));
-break;
-end;
-v28 = v27;
-p1:SetPrimaryPartCFrame(CFrame.lookAt(l__PrimaryPart__8.Position, v15.Position - Vector3.new(0, v15.Position.Y - l__PrimaryPart__8.Position.Y, 0)) * CFrame.Angles(0, math.rad(17.5 + v27), 0));
-end;
-end;
-local v31 = ((p1.PrimaryPart.Position - v14.PrimaryPart.Position).Unit - v14.Humanoid.MoveDirection).Magnitude < 1;
-if v13 then
-local v32 = 8;
-else
-v32 = 7;
-end;
-if v31 then
-local v33 = 2;
-else
-v33 = 0;
-end;
-local v34 = v32 + v33;
-if v9.Enabled and v9.Grip == Grips.Up then
-v11 = v10;
-end;
-if v16 and not v16.Enabled and v10 - v12 > 0.1 and not (v10 - v12 < 0.2) and v10 - v11 > 0.05 then
-v34 = v34 - 2;
-end;
-if v10 - v11 > 0.5 then
-v34 = v34 + 2;
-end;
-if v21 < 15 then
-v9:Activate();
-end;
-if v22 > 8 and p1.Humanoid.Health < v14.Humanoid.Health then
-v34 = v34 + 10;
-end;
-local v35 = -v14.PrimaryPart.CFrame.RightVector;
-if v18 and v23 then
-v35 = v35 * 3;
-v34 = 2;
-end;
-if SideCast(v14) or v9.Grip == Grips.Up then
-v35 = Vector3.new(0, 0, 0);
-end;
-local v36 = l__Position__24 - (l__Position__24 - l__PrimaryPart__8.Position).Unit * v34 + v35;
-if v18 then
-
-end;
-if v22 < v34 then
-if GetRetreatDirection(p1, v14, 10) and v31 then
-l__Humanoid__7:MoveTo((GetRetreatDirection(p1, v14, 100)));
-else
-l__Humanoid__7:MoveTo(v36);
-end;
-else
-l__Humanoid__7:MoveTo(v36);
-end;
-end;
-end;
-end;
-
-------------------------
-
-Ai(char)
+return module
