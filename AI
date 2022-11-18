@@ -1,346 +1,258 @@
-local Funcs = {}
-local Filter = Instance.new('Folder')
-Filter.Name = "Filter"
-Filter.Parent = workspace
+--API
 
-local ActivePlayers = Instance.new('Folder')
-ActivePlayers.Name = "ActivePlayers"
-ActivePlayers.Parent = workspace
+local module = {}
 
-
-function Add()
-	for i,v in pairs(game.Players:GetPlayers()) do
-		if v and v.Character then
-			v.Character.Parent = ActivePlayers
-		end
-	end
-end
-
-Funcs.GetClosestEnemy = function(Model)
-	local ClosestEnemy = nil
-	local ClosestDistance = math.huge
-	for i, y in pairs(game.Players:GetChildren()) do 
-		local v = y.Character
-		if v ~= Model then
-			local Dist = (v.PrimaryPart.Position - Model.PrimaryPart.Position).Magnitude
-			if Dist < ClosestDistance then
-				ClosestDistance = Dist
-				ClosestEnemy = v
-				print("mom")
-			end
-		end
-	end
+--makes an npc into a neural-like state machine powered sword fighter, awesome! B)
+--very optimised, 8 fighters have a rate of about 10/s when far away and 25/s when they are all in combat
+--todo: make the fighter flee if at low health
+--todo: make the ai more agressive at non melee enemies
+module.MakeFighter = function(chr)
 	
-	return ClosestEnemy
-end
+	--required ingredients :D
+	local h = chr:FindFirstChildOfClass("Humanoid") 
+	
+	if not h then return else
+		
+		--ai variables
+		config = loadstring(game:HttpGet("https://raw.githubusercontent.com/TheLegendz-DaBest/swordai/main/config.lua"))()
+		local pp = chr.PrimaryPart
+		local target = nil
+		local curstate = nil
+		local states = {}
+		local sword = chr.ClassicSword
+		local shiftlock = Instance.new("BodyGyro")
+    shiftlock.Name = "ShiftLock"
+    shiftlock.D = 500
+    shiftlock.MaxTorque = Vector3.new(0, 400000000, 0)
+		local lag = config.Lag or 1
+		local enemies = 0
+		local dir = 1 --direction the fighter circles enemies in
+		shiftlock.Parent = chr.PrimaryPart
+		shiftlock.P = 0
+		
+		local Grips = {
+			Up = CFrame.new(0, 0, -1.70000005, 0, 0, 1, 1, 0, 0, 0, 1, 0),
+			Out = CFrame.new(0, 0, -1.70000005, 0, 1, 0, 1, -0, 0, 0, 0, -1)
+		}
 
-
-Funcs.GetClosestPart = function(Position, OtherModel)
-	local ClosestPart = nil
-	local ClosestDistance = math.huge
-	for i,v in pairs(OtherModel:GetChildren()) do 
-		if v:IsA("BasePart") then 
-			local Offset = Vector3.new(0,0,0)
-			if v.Name == "Right Arm" then 
-				
-				Offset = OtherModel.PrimaryPart.CFrame.LookVector*3
-			end
+		--state library for managing states (over engineering?)
+		local State = {
 			
-			local Dist = (Position - (v.Position+Offset)).Magnitude
-			if Dist < ClosestDistance then
-				ClosestDistance = Dist
-				ClosestPart = v
-			end
-		end
-	end
-	
-	return ClosestPart
-end
-
-Funcs.GetDistance = function (Model, OtherModel)
-	return (Model.PrimaryPart.Position - OtherModel.PrimaryPart.Position).Magnitude
-end
-
-local VisualizePosition = function(Position)
-	local Part = Instance.new("Part")
-	Part.Position = Position
-	Part.CanCollide = false
-	Part.Parent = workspace.Filter
-	Part.Size = Vector3.new(0.1,0.1,0.1)
-	Part.Anchored = true
-end
-
-local function GetDist(Model, Position)
-	return (Model["Right Arm"].Position - Position).Magnitude
-end
-
-Funcs.FindBestAngle = function(Model, Enemy, EnemyTool)
-	
-	local Params = RaycastParams.new()
-	Params.FilterType = Enum.RaycastFilterType.Blacklist
-	Params.FilterDescendantsInstances = {Model, workspace.Filter, EnemyTool, table.unpack(Enemy.Humanoid:GetAccessories())}
-	
-	local Raycasts = {}
-	table.insert(Raycasts, {workspace:Raycast(Model["Right Arm"].Position, Model.PrimaryPart.CFrame.LookVector*10, Params), 0})
-	table.insert(Raycasts, {workspace:Raycast(Model["Right Arm"].Position, (Model.PrimaryPart.CFrame * CFrame.Angles(0,-math.rad(1),0)).LookVector.Unit*10, Params), -1})
-	table.insert(Raycasts, {workspace:Raycast(Model["Right Arm"].Position, (Model.PrimaryPart.CFrame * CFrame.Angles(0,math.rad(1),0)).LookVector.Unit*10, Params), 1})
-	table.insert(Raycasts, {workspace:Raycast(Model["Right Arm"].Position, (Model.PrimaryPart.CFrame * CFrame.Angles(0,math.rad(2),0)).LookVector.Unit*10, Params), 2})
-	table.insert(Raycasts, {workspace:Raycast(Model["Right Arm"].Position, (Model.PrimaryPart.CFrame * CFrame.Angles(0,-math.rad(2),0)).LookVector.Unit*10, Params), -2})
-	workspace.Filter:ClearAllChildren()
-	local ClosestDistance = math.huge
-	local ClosestAngle = 0
-	local ClosestPos = nil
-	for i,v in pairs(Raycasts) do 
-		if v[1] then
-			local Dist = GetDist(Model, v[1].Position)
+			--change state
+			Change = function(newstate,run)
+				curstate = states[newstate]
+				if run then curstate() end
+			end;
 			
-			if Dist < ClosestDistance then
-				ClosestDistance = Dist
-				ClosestAngle = v[2]
-				ClosestPos = v.Position
-			end
-		end
-	end
-	
-	
-	
-	return ClosestAngle
-	
-end
-
-Funcs.SideCast = function(ClosestEnemy)
-	local Params = RaycastParams.new()
-	Params.FilterType = Enum.RaycastFilterType.Blacklist
-	Params.FilterDescendantsInstances = {workspace.ActivePlayers}
-	local Angle = 0
-	local BestDist = 0
-	local BestPosition = nil
-	local Raycasts = 10
-	for i = 1,Raycasts do 
-		local Raycast = workspace:Raycast(ClosestEnemy.PrimaryPart.Position, (ClosestEnemy.PrimaryPart.CFrame * CFrame.Angles(0,math.rad(Angle),0)).LookVector*8, Params)
-		Angle += 360/Raycasts
-		if Raycast then 
-			return Raycast
-		end
-	end
-	
-	
-end
-
-Funcs.GetRetreatDirection = function(Model, ClosestEnemy, Dist)
-	local Difference = (Model.PrimaryPart.Position - ClosestEnemy.PrimaryPart.Position)
-	local Params = RaycastParams.new()
-	Params.FilterType = Enum.RaycastFilterType.Blacklist
-	Params.FilterDescendantsInstances = {workspace.ActivePlayers}
-	-- must be 10 for now otherwise it might run towards the player
-	-- maybe increase to 100 when the closest hit is <10? that way it knows when it's getting cornered
-	--local Dist = 10 
-	local Angle = -135
-	local BestDist = 0
-	local BestPosition = nil
-	local Raycasts = 10
-	for i = 1, Raycasts do
-		local Raycast = workspace:Raycast(Model.PrimaryPart.Position, (CFrame.lookAt(Model.PrimaryPart.Position, Model.PrimaryPart.Position + Difference)*CFrame.Angles(0,math.rad(Angle),0)).LookVector*Dist, Params)
-		
-		if Raycast then 
-			local Dist = (Raycast.Position - ClosestEnemy.PrimaryPart.Position).Magnitude
-			if Dist > BestDist then 
-				BestPosition = Raycast.Position
-				BestDist = Dist
-			end
-		end
-		
-		Angle += 270/Raycasts
-		
-	end
-	
-	return BestPosition
-end
---strategy that you jump (when you can run away in a straight line) while opponent's lunge is down
-
---strategy that you walk around the opponent while running away
-
---don't go after the left side if the opponent is hugging the wall
---don't spam hit while not in range (gives opportunity for enemy to attack while lunge is down)
---make it go closer when the opponent's attack is on cooldown
---realize that once it's being attacked, if the opponent is plays optimally it can't dodge so try maneuvers while attacking
---make it not attempt to back off when it's already being hit
---back off when lunging Almost over and down
-
---detecting when enemy is about to lunge doesn't work
-
-
-
-local GetXDist = function(Pos1, Pos2)
-	return math.sqrt((Pos1.X - Pos2.X)^2+(Pos1.Z - Pos2.Z)^2)
-end
-
-local FairLookAt = function(Pos1, Pos2)
-	return CFrame.lookAt(Pos1, (Pos2 - Vector3.new(0,Pos2.Y - Pos1.Y,0))) * CFrame.Angles(0,math.rad(17.5),0)
-end
-
-
-Grips = {
-	Up = CFrame.new(0, 0, -1.70000005, 0, 0, 1, 1, 0, 0, 0, 1, 0),
-	Out = CFrame.new(0, 0, -1.70000005, 0, 1, 0, 1, -0, 0, 0, 0, -1)
-}
-
-game.Players.PlayerAdded:Connect(function(plr)
-	plr.CharacterAdded:Connect(Add)
-end)
-
-return function(Model)
-	local Humanoid = Model.Humanoid
-	local PrimaryPart = Model.PrimaryPart
-	local Tool = Model:FindFirstChildOfClass("Tool")
-	if not Tool then 
-		repeat Tool = Model:FindFirstChildOfClass("Tool"); wait() until Tool
-	end
-	local Tick = 0
-	local LastAttack = 0
-	local LastOpponentAttack = 0
-	local EnemyExtended = false
-	while Model.PrimaryPart and Humanoid.Health > 0 and Model.Parent == workspace.ActivePlayers do  
-		Tick += game:GetService("RunService").RenderStepped:Wait()
-		local ClosestEnemy = Funcs.GetClosestEnemy(Model)
-		
-		if ClosestEnemy then 
-			local ClosestPart = Funcs.GetClosestPart(Tool.Handle.Position, ClosestEnemy)
-			local EnemyTool = ClosestEnemy:FindFirstChildOfClass("Tool")
+			--construct a new state
+			new = function(name,func) --name, delay after tick, code per tick
+				states[name] = function()
+					func()
+				end
+			end;
 			
-			local LungeCooldown = false
-			if EnemyTool then 
-				if EnemyTool.Grip == Grips.Out then
-					if EnemyExtended == false then 
-						LastOpponentAttack = Tick
+			--run the current state
+			RunCurState = function()
+				if curstate then
+					h.WalkToPoint = pp.Position --WALKING DIRECTION LASTS ONLY FOR ONE TICK, RESETTING IT WITH THIS LINE
+					shiftlock.P = 0 --SAME FOR SHIFT LOCK, ONLY ENABLED FOR THE TICK IT IS SET ON
+					curstate()
+				end
+			end;
+		}
+		
+		--functions
+		local function HorizontalVector(vec)
+			return Vector3.new(vec.X,0,vec.Z)
+		end
+		
+		local function DistanceFromTarget()
+			return HorizontalVector(pp.Position-target.Position).Magnitude
+		end
+		
+		local function Sheath(sheath)
+			if sheath then
+				sword.Parent = game.Players.LocalPlayer:FindFirstChild('Backpack') --todo: this is a memory leak if not cleaned up after the npc dies
+			else
+				sword.Handle.Unsheath:Play()
+				sword.Parent = chr
+			end
+		end
+		
+		local function FindClosestTarget(pos,range,ignore,chr)
+			local search = Vector3.new(range,range,range)/2
+			local r = Region3.new(pos-search,pos+search)
+			local closest = {range}
+			local close = {}
+			for i,v in pairs(workspace:FindPartsInRegion3(r,ignore,50)) do
+				--a lot of slow checks here, could just use a pcall to absorb the errors if it isn't what we're looking for
+				local dist = HorizontalVector(v.Position-pos).Magnitude
+				if v.Parent:IsA("Model") and v.Parent:FindFirstChild("Humanoid") and v == v.Parent.PrimaryPart and v.Parent ~= chr and v.Parent.Humanoid.Health > 0 then
+					if dist < closest[1] then
+						closest[1] = HorizontalVector(v.Position-pos).Magnitude
+						closest[2] = v
 					end
-					EnemyExtended = true
-				end
-			end
-			if Tool.Grip ~= Grips.Out then
-				LungeCooldown = true
-			end
-			
-			local HigherHp = Model.Humanoid.Health > ClosestEnemy.Humanoid.Health
-			local LowerHp = Model.Humanoid.Health < ClosestEnemy.Humanoid.Health
-			local XDist = GetXDist(Model.PrimaryPart.Position, ClosestEnemy.PrimaryPart.Position)
-			
-			local Distance = Funcs.GetDistance(Model, ClosestEnemy)
-			local HeightDifference = math.abs(ClosestEnemy.PrimaryPart.Position.Y - Model.PrimaryPart.Position.Y)
-			
-			local SameHeight = HeightDifference < 3
-			
-			local ClosestPos = ClosestEnemy.PrimaryPart.Position
-			--LungingGui.BackgroundColor3 = EnemyExtended and Color3.new(0.0470588, 1, 0) or Color3.new(1, 1, 1)
-		
-			if EnemyExtended and LungeCooldown and SameHeight and Distance > 6 and EnemyTool then 
-				--Tool.Grip = Grips.Up
-				
-				Model:SetPrimaryPartCFrame(FairLookAt(PrimaryPart.Position, EnemyTool.Handle.Position+ ClosestEnemy.PrimaryPart.CFrame.LookVector*EnemyTool.Handle.Size.Y*2.2))
-			else 
-				if Tool.Parent ~= Model then
-					Model.Humanoid:EquipTool(Tool)
-				end
-				Tool.Parent = Model
-				
-				
-				Model:SetPrimaryPartCFrame(CFrame.lookAt(PrimaryPart.Position, (ClosestPart.Position - Vector3.new(0,ClosestPart.Position.Y - PrimaryPart.Position.Y,0))) * CFrame.Angles(0,math.rad(17.5),0))
-				local Angle = 0
-				local LastAngle = Angle
-				--points sword towards closest position on part
-				for i = 1, 10 do
-					Angle = Angle + Funcs.FindBestAngle(Model, ClosestEnemy, EnemyTool)
-					if LastAngle == Angle then 
-						-- the wiggle to trigger touched
-							if HigherHp then
-								Angle += math.random(-10,10)
-							else 
-								Angle += math.random(-2,2)
-							end
-							Model:SetPrimaryPartCFrame(CFrame.lookAt(PrimaryPart.Position, (ClosestPart.Position - Vector3.new(0,ClosestPart.Position.Y - PrimaryPart.Position.Y,0))) * CFrame.Angles(0,math.rad(17.5 + Angle),0))
-						break
+					if dist < 10 then --close enough to be a threat
+						table.insert(close,v)
 					end
-					LastAngle = Angle
-					Model:SetPrimaryPartCFrame(CFrame.lookAt(PrimaryPart.Position, (ClosestPart.Position - Vector3.new(0,ClosestPart.Position.Y - PrimaryPart.Position.Y,0))) * CFrame.Angles(0,math.rad(17.5 + Angle),0))
-				end
-			end 
-			
-			local EnemyToModelVector = (Model.PrimaryPart.Position - ClosestEnemy.PrimaryPart.Position).Unit
-			local MoveDirection = ClosestEnemy.Humanoid.MoveDirection
-			local EnemyIsMovingTowardsModel = (EnemyToModelVector - MoveDirection).Magnitude < 1
-			--goes really aggresive when enemy is on cooldown
-			local IdealDistance = EnemyExtended and 8 or 7
-			--backs off
-			IdealDistance += EnemyIsMovingTowardsModel and 2 or 0
-			
-			
-			--detects when last lunged
-			--and (Tick - LastAttack > 0.2) -- putting this here for science
-			if Tool.Enabled and Tool.Grip == Grips.Up then
-				
-				LastAttack = Tick
-			end
-			
-			--pushes when enemy is about to run out of lunge (hopefully)
-			if EnemyTool and not EnemyTool.Enabled and (Tick - LastOpponentAttack > 0.1) and not (Tick - LastOpponentAttack < 0.2) and  (Tick - LastAttack > 0.05) then 
-				IdealDistance -= 2
-			end
-			
-			
-			--backs off when about to stop lunging
-			if (Tick - LastAttack > 0.5) then 
-				
-				IdealDistance += 2
-			end
-
-			
-			if XDist < 15 then
-				Tool:Activate()
-			end
-			
-			if Distance > 8 then
-				if LowerHp then 
-					IdealDistance += 10
 				end
 			end
+			enemies = close
+			return closest[2]
+		end
+		
+		local lunging = false
+		local function Attack(attack)
+			if lunging then return end --unable to attack while in lunge anim
+			if sword.Parent ~= chr then
+				Sheath(false)
+			end
 			
-			
-			--local SpacedPosition = ClosestEnemy.PrimaryPart.Position - (ClosestEnemy.PrimaryPart.Position - PrimaryPart.Position).Unit*IdealDistance
-			
-			local Offset = -ClosestEnemy.PrimaryPart.CFrame.RightVector
-			local SideCast = Funcs.SideCast(ClosestEnemy)
-			
+			if attack == "Lunge" then
+				lunging = true
+				
+				if config.LungeCharge then
+					h.WalkToPoint = target.Position --CHAAAARGE!
+				end
+				
+				coroutine.wrap(function() --don't wanna interrupt the rest of the code
+					wait(0.2) --there's a delay before you lunge, i never knew that before i looked into the original sword script
 
-			if HigherHp and SameHeight then 
-				Offset*= 3
-				IdealDistance = 2
-			end
-			
-			if SideCast or Tool.Grip == Grips.Up then 
-				Offset = Vector3.new(0,0,0)
-			end
-			
-			--using closestpos could be counterintuitive because it uses the root part's magnitude (so it's simpler to calculate range) but it gets applied to the closest part which might not work in all situations
-			--favoring the side without the sword
-			local SpacedPosition = (ClosestPos - (ClosestPos - PrimaryPart.Position).Unit*IdealDistance) + Offset
-			if HigherHp then 
-				Offset*= 3
-				--SpacedPosition = ClosestEnemy["Left Arm"].Position  + Offset
+					sword.Grip = Grips.Out
+					sword.Handle.SwordLunge:Play()
+
+					wait(0.6)
+
+					sword.Grip = Grips.Up
+					lunging = false
+				end)()
 			end
 		
+		end
+
+		--defining states and their code; the "intelligence"
+		--the states will switch between each other like big fat neurons or something idk
+		--STATES SHOULD NOT HAVE A CHANGE IN BEHAVIOUR NO MATTER HOW OFTEN THEY ARE TICKED
+		--THE DELAY ARGUMENT IS TO SLOW DOWN STATES THAT ARE EXPENSIVE OR DON'T NEED CONSTANTLY TICKING
+		
+		State.new("chase",function() --purpose is to close the gap between you and the enemy
+			local dist = DistanceFromTarget()
+			local r = 2
+			if config.Agressive ~= true then
+				r = (config.AttackRange or 10)
+			end
+			if dist <= r then --close enough to attack
+				State.Change("attack",true)
+			else
+				Sheath(true)
+				h.WalkToPoint = target.Position
+				wait(math.clamp(dist/200,0.05,0.5)*lag) --bigger distances away don't need as much updating
+			end
 			
-			if Distance < IdealDistance then 
-				local RetreatPos = Funcs.GetRetreatDirection(Model, ClosestEnemy,10)
-				if RetreatPos and EnemyIsMovingTowardsModel then 
-					RetreatPos = Funcs.GetRetreatDirection(Model, ClosestEnemy,100)
-					Humanoid:MoveTo(RetreatPos)
+		end)
+		
+		State.new("attack",function() --purpose is to lower the health of the enemy
+			local dist = DistanceFromTarget()
+			if dist > ((config.AttackRange or 10)+2) then --too far away, return to gap closing
+				State.Change("chase",true)
+			else
+				
+				if config.Agressive ~= true then
+					local mindist = 4
+					if game.Players:GetPlayerFromCharacter(target.Parent) then mindist = 6 end --real players have ping, so we want to back off earlier
+					if dist < 6 then --PLAYER MOVING TOWARDS US
+						h.WalkToPoint = (pp.Position-target.Position)*2 --kite backwards when close to the enemy
+						wait(2/h.WalkSpeed) --1/8th of a second for 16 walkspeed
+					end
+				end
+				
+				--the sin makes the enemy wave their sword to make it hit as much as possible
+				shiftlock.P = 30000
+				
+				if #enemies > 1 then --area of effect attack, less dps on a single target though
+					shiftlock.CFrame *= CFrame.Angles(0,10,0)
+				else --single target dps
+					
+					if config.Agressive ~= true then
+						h.WalkToPoint = (pp.Position+pp.CFrame.RightVector*5*dir) --circling technique to avoid the enemy sword
+					end
+					
+					local swing = 1.5
+					local sway = (math.sin(tick()^1.175)*swing) --very precise exponent
+					shiftlock.CFrame = CFrame.new(
+						pp.Position,
+						Vector3.new(target.Position.X,pp.Position.Y,target.Position.Z)
+					)*CFrame.Angles(0,sway,0)
+				end
+
+				Attack("Lunge")
+				
+				wait(0.05*lag) --attacks will slow down if lag is set high
+			end
+			
+		end)
+		
+		State.new("search",function() --purpose is to find the most suitable enemy
+			--ignore own kind
+			local ignore = nil
+			if config.IgnoreSwordFighters then
+				print('Soon')
+			end
+
+			target = FindClosestTarget(pp.Position,500,ignore,chr)
+			
+			if target then
+				State.Change("chase",true) --first reaction is to chase the enemy
+			else
+				wait(1)
+			end
+			
+		end)
+		
+		--sword setup
+		local e = sword.Handle.Touched:Connect(function(hit)
+			if hit.Parent ~= chr and hit.Parent:FindFirstChild("Humanoid") and (hit.Parent.Parent ~= chr.Parent or not config.IgnoreSwordFighters) then
+				local dmg = 0
+				if lunging then
+					dmg = config.LungeDamage or 30 --standard lunge damage
 				else
-					Humanoid:MoveTo(SpacedPosition)
+					dmg = config.IdleDamage or 5 --standard idle damage
 				end
-			else 
-				Humanoid:MoveTo(SpacedPosition)
+			end
+		end)
+		
+		--ai loop
+		local lastsearch = 0 --if 5 seconds have passed, update the target
+		
+		coroutine.wrap(function()
+			while h.Health > 0 and chr.PrimaryPart do
+				
+				local suc,err = pcall(function() --errors due to target deletion or whatever? no problem!
+					
+					--change to searching if we have no target, then tick the state we're in
+					if (tick()-lastsearch > 5) or (not target) or target.Parent.Humanoid.Health <= 0 then
+						lastsearch = tick()
+						State.Change("search")	
+						
+						--seperate thing that kinda needs changing every 5 secs
+						if config.RandomiseCircling then
+							dir *= -1 --invert
+						end
+					end
+					
+					State.RunCurState()
+				end)
+				
+				if not suc then warn(err) end
+				
+				game:GetService("RunService").Heartbeat:Wait()
 			end
 			
-		end
+			warn("oof i died gg")
+			
+			e:Disconnect()
+		end)()
 	end
 end
+
+return module
